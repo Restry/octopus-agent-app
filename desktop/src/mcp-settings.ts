@@ -1,10 +1,34 @@
+/// <reference lib="es2024.promise" />
 import {api} from './platform';
 type McpConfig={type?:string;command?:string;args?:string[];env?:Record<string,string>;url?:string};
+let installingMcp=false;
+function confirmMcpCommands(commands:[string,McpConfig][]):Promise<boolean> {
+ const {promise,resolve}=Promise.withResolvers<boolean>();
+  const dialog=document.createElement('dialog');dialog.className='agent-mcp-confirm';dialog.setAttribute('aria-label','确认启动本机 MCP 程序');
+  const title=document.createElement('strong');title.textContent='允许启动以下本机 MCP 程序？';
+  const hint=document.createElement('p');hint.textContent='请核对程序与参数。不会自动下载安装。仅显示环境变量名，不显示值。';
+  const details=document.createElement('pre');details.tabIndex=0;details.textContent=commands.map(([id,c])=>id+'\n'+JSON.stringify({command:c.command,args:c.args||[],envNames:Object.keys(c.env||{})},null,2)).join('\n\n');
+  const actions=document.createElement('div');actions.className='agent-mcp-confirm-actions';
+  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='取消';cancel.autofocus=true;
+  const allow=document.createElement('button');allow.type='button';allow.textContent='允许启动';
+  const focused=document.activeElement as HTMLElement|null;
+  let settled=false;
+  const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finish(false);}};
+  const finish=(allowed:boolean)=>{if(settled)return;settled=true;window.removeEventListener('keydown',onKeyDown,true);dialog.close();dialog.remove();focused?.focus();resolve(allowed);};
+  cancel.onclick=()=>finish(false);allow.onclick=()=>finish(true);
+  dialog.oncancel=event=>{event.preventDefault();finish(false);};dialog.onclose=()=>finish(false);
+  actions.append(cancel,allow);dialog.append(title,hint,details,actions);document.body.append(dialog);
+  try{dialog.showModal();cancel.focus();window.addEventListener('keydown',onKeyDown,true);}catch(error){dialog.remove();throw error;}
+ return promise;
+}
 export async function installMcpServers(servers:Record<string,McpConfig>,sessionId:string) {
+ if(installingMcp)throw new Error('已有 MCP 添加操作进行中，请先完成确认或等待连接结束');
+ installingMcp=true;
+ try{
  const entries=Object.entries(servers);
  if(!entries.length||entries.length>16)throw new Error('请提供 1–16 个 MCP 配置');
  const commands=entries.filter(([,c])=>c.command);
- if(commands.length&&!window.confirm('允许启动以下本机 MCP 程序？请核对程序与参数。不会自动下载安装。\n\n'+commands.map(([id,c])=>id+'\n'+JSON.stringify({command:c.command,args:c.args||[],envNames:Object.keys(c.env||{})},null,2)).join('\n\n')))throw new Error('已取消启动 MCP');
+ if(commands.length&&!await confirmMcpCommands(commands))throw new Error('已取消启动 MCP');
  const installed:string[]=[];
  for(const [id,config] of entries){
   const request=await api<{requestId:string;intent:string}>('agent_prepare_install',{instruction:'请添加 MCP',installation:{kind:'mcp',id,config},sessionId,confirmCommand:!!config.command});
@@ -12,6 +36,7 @@ export async function installMcpServers(servers:Record<string,McpConfig>,session
   window.dispatchEvent(new Event('octopus:connections-changed'));
  }
  return '已连接 '+installed.join('、')+'，已完成握手与工具发现。新建会话后可使用这些工具；已有会话保持原能力。';
+ }finally{installingMcp=false;}
 }
 export function mountMcpSettings(container:HTMLElement,ensureSession:()=>Promise<string>) {
  const panel=document.createElement('section');panel.className='agent-packages';panel.setAttribute('aria-label','添加 MCP');
