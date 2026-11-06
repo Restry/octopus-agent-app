@@ -1,0 +1,11 @@
+node_modules/
+desktop/dist/
+.env*
+*.log
+.data/
+desktop/src-tauri/target/
+desktop/src-tauri/resources/
+desktop/src-tauri/gen/
+release/
+*.key
+*.pem

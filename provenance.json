@@ -1,0 +1,101 @@
+{
+  "sourceRepository": "menshen-release-integration (local source snapshot)",
+  "files": [
+    {
+      "source": "desktop/tsconfig.json",
+      "destination": "desktop/tsconfig.json",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/components/chat-panel/styles.css",
+      "destination": "desktop/src/components/chat-panel/styles.css",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/octopus.css",
+      "destination": "desktop/src/octopus.css",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/agent.css",
+      "destination": "desktop/src/agent.css",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/agent.ts",
+      "destination": "desktop/src/agent.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/components/chat-panel/markdown.ts",
+      "destination": "desktop/src/components/chat-panel/markdown.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "scripts/agent-memory.mjs",
+      "destination": "scripts/agent-memory.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "scripts/local-request.mjs",
+      "destination": "scripts/local-request.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "scripts/agent-provider-diagnostics.mjs",
+      "destination": "scripts/agent-provider-diagnostics.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/components/chat-panel/types.ts",
+      "destination": "desktop/src/components/chat-panel/types.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/packages.ts",
+      "destination": "desktop/src/packages.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "scripts/agent-runs.mjs",
+      "destination": "scripts/agent-runs.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "packages/menshen-agent-package/runtime.mjs",
+      "destination": "packages/menshen-agent-package/runtime.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/platform.ts",
+      "destination": "desktop/src/platform.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "scripts/model-catalog.mjs",
+      "destination": "scripts/model-catalog.mjs",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/octopus-state.ts",
+      "destination": "desktop/src/octopus-state.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/components/chat-panel/ChatPanel.ts",
+      "destination": "desktop/src/components/chat-panel/ChatPanel.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/octopus.ts",
+      "destination": "desktop/src/octopus.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    },
+    {
+      "source": "desktop/src/memory.ts",
+      "destination": "desktop/src/memory.ts",
+      "commit": "4a97dd6f41f2240b0e8a973a1685c018aecb9c35"
+    }
+  ],
+  "core": "vendor/personal-agent-core-0.4.0.tgz; committed 0.4.0; no dirty core sources"
+}
