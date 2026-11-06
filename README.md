@@ -64,4 +64,6 @@ npm run desktop:build
 
 ## 来源与许可前置条件
 
-`vendor/personal-agent-core-0.4.0.tgz` 原样包含 `@personal-agent/core` 的源码、README 与契约。其 package.json 标记 `private: true`，压缩包没有 LICENSE 或 license 字段。本项目没有替该核心授予新的开源许可证；公开源代码和二进制分发前，发布负责人必须确认作者授权并补齐原作者许可。其他依赖的原始许可证随生产依赖保留。不要将此本地仓库的既有历史直接推送公开仓库：历史含个人来源路径及旧模型服务配置，应使用经过审查的干净 snapshot 建立公开初始提交。
+v0.2.0 已公开发布：[下载 Release](https://github.com/Restry/octopus-agent-app/releases/tag/v0.2.0)。项目所有者已授权本次源码与二进制发布。本项目与随附的 `@personal-agent/core` 尚未指定通用开源许可证，公开访问不自动授予第三方修改或再分发许可；本仓库没有另行选择许可证。其他依赖的原始许可证随生产依赖保留。
+
+公开初始提交使用审查后的 53 文件快照，没有推送原有私人历史。v0.2.0 的 `build-source.json` 记录实际构建源文件哈希，公开源码归档与之逐文件对应；本 README 的发布后说明属于后续文档更新。
