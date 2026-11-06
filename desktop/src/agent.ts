@@ -6,6 +6,7 @@ import { ChatPanel } from "./components/chat-panel/ChatPanel";
 import { purgeLegacyChatHistory } from "./chat-history";
 import { mountOctopus } from './octopus';
 import {createUpdater} from './updater';
+import {installMcpServers,mountMcpSettings} from './mcp-settings';
 import type {
   ChatPanelModel,
   ChatContext,
@@ -111,15 +112,15 @@ function splitMessage(raw: string, defaultProject: string, knownKeys: string[] =
 }
 async function prepareInstallation(raw: string, sessionId: string, project: string) {
   const start = raw.indexOf('{');
-  if (start < 0 || !/(安装|添加|接入|install|add|connect)/i.test(raw.slice(0,start))) return null;
+  if (start < 0 || raw.slice(0,start).trim() && !/(安装|添加|接入|install|add|connect)/i.test(raw.slice(0,start))) return null;
   let data: Record<string, any>;
   try { data = JSON.parse(raw.slice(start).replace(/\s*```\s*$/, '')); }
   catch { throw new Error('安装 JSON 无效；请提供完整配置或 slug、content。'); }
+  if(!raw.slice(0,start).trim()&&!data.mcpServers)return null;
   let installation: Record<string, unknown>;
   if (data.mcpServers) {
-    const entries = Object.entries(data.mcpServers);
-    if (entries.length !== 1) throw new Error('每条消息请明确安装一个 MCP。');
-    installation = {kind:'mcp',id:entries[0][0],config:entries[0][1]};
+    const intent=await installMcpServers(data.mcpServers,sessionId);
+    return {intent,credentials:'',project,keys:[] as string[],display:intent,installRequestId:undefined,localOnly:true};
   } else if (data.slug && data.content) installation = {kind:'skill',slug:data.slug,content:data.content};
   else if (data.id && data.url) {
     const {id,...config} = data;
@@ -403,6 +404,7 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
     updater.mount(view.auxiliary);
     mountPackages(view.auxiliary);
     mountMemory(view.auxiliary);
+    mountMcpSettings(view.auxiliary,async()=>{await ensureSession();return activeId;});
     const fieldset = form.querySelector("fieldset")!;
     const status = form.querySelector("p")!;
     const current = () => section === "settings" && view.auxiliary.contains(form);
@@ -667,6 +669,9 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
             action("高级设置", () => {
               void settings();
             }),
+            action("添加 MCP", () => {
+              void settings();
+            }),
             action('软件更新', () => { if (aux('updates')) updater.mount(view.auxiliary); }),
             action("重新加载会话", () => { void (activeId ? loadSession(activeId) : loadSessions()).catch(error=>{model.status=String(error);render();}); }),
             action("清除全部会话", () => { void (async () => {
@@ -700,6 +705,12 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
     open();
   });
   document.body.append(launcher, view.element);
+  const mcpEntry=document.createElement('button');mcpEntry.type='button';mcpEntry.textContent='添加 MCP';mcpEntry.className='agent-mcp-entry';
+  const mcpState=document.createElement('p');mcpState.setAttribute('role','status');
+  mcpEntry.onclick=()=>{void settings();};
+  const mcpBar=document.createElement('div');mcpBar.className='agent-mcp-bar';mcpBar.append(mcpState,mcpEntry);view.element.querySelector('.cp-bottom')!.prepend(mcpBar);
+  const refreshMcpState=()=>{void api<{id:string;connected:boolean}[]>('connections').then(items=>{mcpState.textContent=items.length?items.map(c=>c.id+' · '+(c.connected?'已连接':'连接失败')).join('；'):'尚未添加 MCP';}).catch(()=>{mcpState.textContent='MCP 状态读取失败';});};
+  window.addEventListener('octopus:connections-changed',refreshMcpState);refreshMcpState();
   const ready = (async () => {
     purgeLegacyChatHistory();
     await loadSessions();
@@ -748,6 +759,9 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
       return;
     } finally { if (preparationEpoch === epoch) { preparing = false; render(); } }
     if (preparationEpoch !== epoch) return;
+    if ('localOnly' in parsed && parsed.localOnly) {
+      view.setDraft('');model.status=parsed.intent;render();return;
+    }
     project = parsed.project;
     const runId = `chat-${Date.now().toString(36)}-${Array.from(crypto.getRandomValues(new Uint32Array(2)), n => n.toString(36)).join('-')}`, 
       current = ++epoch;

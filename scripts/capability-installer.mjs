@@ -21,13 +21,13 @@ export function createCapabilityInstaller({directory=dataDirectory()}={}){
  const serial=fn=>{const next=queue.then(fn);queue=next.catch(()=>{});return next;};
  const registry=path.join(directory,'mcp-installed.json'),skillsRoot=path.join(directory,'skills');
  const readRegistry=async()=>{try{return JSON.parse(await privateFile(registry));}catch(e){if(e.code==='ENOENT')return {};throw e;}};
- async function prepare({instruction,installation,sessionId}){
+ async function prepare({instruction,installation,sessionId,confirmCommand=false}){
   if(typeof instruction!=='string'||instruction.length>200||!/^(?:请帮我|请|帮我|现在|直接|please)?\s*(?:安装|添加|接入|install\b|add\b|connect\b)/i.test(instruction)||/不要|不许|禁止|只读|别|暂不|do not|don't|never|如何|怎么|方案|解释/i.test(instruction)||!/^[-\p{L}\p{N}\s，。,:：!！]+$/u.test(instruction)||typeof sessionId!=='string')fail('本轮没有匹配的明确安装授权');
   if(!installation||Object.keys(installation).some(k=>!['kind','id','config','slug','content'].includes(k)))fail('本轮没有匹配的明确安装授权');
   let payload;
   if(installation.kind==='mcp'){
-   if(['menshen','mem0'].includes(installation.id))fail('安装目标已存在，禁止覆盖');
    payload={kind:'mcp',id:installation.id,config:validateMcp(installation.id,installation.config)};
+   if(payload.config.type==='stdio'&&confirmCommand!==true)fail('本轮没有匹配的明确安装授权');
   }else if(installation.kind==='skill')payload={kind:'skill',...validateSkill(installation)};
   else fail('本轮没有匹配的明确安装授权');
   for(const [id,p] of pending)if(Date.now()-p.createdAt>600000)pending.delete(id);
@@ -58,8 +58,8 @@ export function createCapabilityInstaller({directory=dataDirectory()}={}){
   return result;
  }
  const tools=(tool,input)=>[
-  tool('install_mcp','仅执行本条用户明确提供并经后端校验的 Streamable HTTP MCP 安装引用；握手和工具发现成功后才落盘，新会话可用。禁止自行生成配置。',{requestId:Type.String({pattern:'^[a-f0-9]{16}$'})},({requestId})=>installMcp(requestId,input)),
+  tool('install_mcp','仅执行本条用户明确提供并经后端校验的 MCP 安装引用；握手和工具发现成功后才落盘，新会话可用。禁止自行生成配置。',{requestId:Type.String({pattern:'^[a-f0-9]{16}$'})},({requestId})=>installMcp(requestId,input)),
   tool('install_skill','仅安装本条用户提供的纯 SKILL.md 引用，不执行脚本，不联网下载，不覆盖内置技能；新会话提供 read_skill。',{requestId:Type.String({pattern:'^[a-f0-9]{16}$'})},({requestId})=>installSkill(requestId,input))
  ];
- return {prepare,skills,tools};
+ return {prepare,skills,tools,installMcp};
 }

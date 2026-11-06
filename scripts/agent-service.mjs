@@ -444,9 +444,13 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
     } finally {signal?.removeEventListener('abort',abort); await session?.abort(); session?.dispose(); refs.clear(); values.forEach(v=>v.value=''); active.delete(input.id);}
   }
   return async (command,args={}, options={}) => {
+    if(command === 'agent_install_prepared') {
+      try { return await installer.installMcp(args.requestId,{sessionId:args.sessionId,intent:args.intent,installRequestId:args.requestId}); }
+      catch(error) { fail(installationReasons.includes(error.message)?error.message:'MCP 安装失败；请检查配置',400); }
+    }
     if(command === 'agent_prepare_install') {
       try { return await installer.prepare(args); }
-      catch(error) { fail(installationReasons.includes(error.message) ? error.message : '安装配置无效；仅支持 Streamable HTTP 或纯 SKILL.md，请检查 URL、认证字段和技能格式',400); }
+      catch(error) { fail(installationReasons.includes(error.message) ? error.message : '安装配置无效；支持已安装程序的 stdio、Streamable HTTP 或纯 SKILL.md',400); }
     }
     if (command.startsWith('agent_memory_')) {
       try {

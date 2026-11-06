@@ -33,9 +33,17 @@ export OCTOPUS_MODEL=gpt-4.1-mini
 
 ## MCP 和技能
 
-可在聊天中明确请求安装 Streamable HTTP MCP，并附 `mcpServers` JSON；或安装纯文本 SKILL.md。仅支持明确的 HTTP MCP 连接，不执行 stdio 安装命令或任意安装脚本。认证只在后端保存到本机权限 `600` 的配置；不会作为模型可见参数持久化。安装后的能力用于新会话。
+点击聊天下方“添加 MCP”或“更多 → 添加 MCP”，无需先配置模型。可选择本机门神预设并填写已安装 `.app` 的路径，或粘贴标准 `mcpServers` JSON。stdio 会显示程序与参数，确认后才启动；不执行 shell 或自动下载。仅在真实握手与工具发现成功后写入权限 `600` 的本机 registry；认证 env/args 不进入用户气泡、模型或聊天历史。安装后的能力用于新会话。聊天也可发送“请添加”并附同一 JSON；纯文本 SKILL.md 仍使用受控安装引用。
 
 全新安装没有预置个人 MCP 凭据。已有本机门神或 mem0 配置仅作为可选本机引用读取，不随安装包分发。无已配置 MCP 时可正常使用已配置的模型聊天。
+
+同机门神需安装包含 `--mcp-stdio` 入口的新版；已发布的旧版不具备此能力。以下配置使用门神包内 Node，不需要全局 Node，也不需要 HTTP token：
+
+```json
+{"mcpServers":{"menshen":{"command":"/Applications/Menshen.app/Contents/MacOS/menshen-desktop","args":["--mcp-stdio"]}}}
+```
+
+门神 stdio 仅开放 `search_metadata` 和 `menshen_read_skill`；vault 本身仍须按门神要求初始化。通用 stdio 使用已安装程序的 `command`、`args` 和可选 `env`；HTTP 保持 `type: "http"`、`url`、可选认证 `headers` 契约。配置保存在 `mcp-installed.json`，重启会恢复连接；失败连接保留状态，不显示为已连接。
 
 ## 更新
 

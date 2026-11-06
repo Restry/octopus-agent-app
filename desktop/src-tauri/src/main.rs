@@ -234,6 +234,12 @@ fn main() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 if let Some(mut child) = app.state::<Desktop>().child.lock().take() {
+                    // Let the service close its stdio MCP children before the fallback kill.
+                    let _ = Command::new("/bin/kill").args(["-TERM", &child.id().to_string()]).status();
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(6);
+                    while child.try_wait().ok().flatten().is_none() && std::time::Instant::now() < deadline {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
                     let _ = child.kill();
                     let _ = child.wait();
                 }

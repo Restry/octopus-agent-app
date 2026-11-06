@@ -87,6 +87,10 @@
 .agent-package select { border: 1px solid #dcdee1; border-radius: 6px; padding: 6px; background: white; width: 100%; }
 .agent-package small { color: #686e74; }
 .agent-package details p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-mcp-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 12px; color: #686e74; }
+.agent-mcp-bar p { margin: 0; overflow-wrap: anywhere; }
+.agent-mcp-entry { flex-shrink: 0; border: 1px solid #dcdee1; border-radius: 6px; padding: 5px 8px; background: #fff; cursor: pointer; }
+.agent-packages textarea { display: block; width: 100%; resize: vertical; border: 1px solid #dcdee1; border-radius: 6px; padding: 7px; background: #fff; font: 12px monospace; }
 @media (max-width: 520px) {
   .agent-launcher {
     right: max(16px, env(safe-area-inset-right));

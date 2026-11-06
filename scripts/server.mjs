@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {createAgentService} from './agent-service.mjs';
-import {initializeConnections,connectionStatus} from './mcp-client.mjs';
+import {initializeConnections,connectionStatus,closeConnections} from './mcp-client.mjs';
 const port=Number(process.env.OCTOPUS_PORT||43917);
 const token=process.env.OCTOPUS_BRIDGE_TOKEN||randomBytes(32).toString('hex');
 await initializeConnections();
@@ -28,4 +28,4 @@ const server=http.createServer(async(req,res)=>{
  try{const file=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));const target=path.resolve(dist,file);if(!target.startsWith(dist))throw new Error();const content=await readFile(target);res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream'});res.end(content);}catch{send(404,{error:'未找到资源'});}
 });
 server.listen(port,'127.0.0.1',()=>console.log(`Octopus service ready http://127.0.0.1:${port} PID ${process.pid}`));
-for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>server.close(()=>process.exit()));
+for(const signal of ['SIGINT','SIGTERM'])process.once(signal,async()=>{await closeConnections();server.close(()=>process.exit());});

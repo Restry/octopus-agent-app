@@ -10,7 +10,7 @@
     "release:assets": "node scripts/release-assets.mjs",
     "import-history": "node scripts/import-history.mjs",
     "start": "node scripts/server.mjs",
-    "test": "node --test scripts/mcp-integration.test.mjs scripts/capability-installer.test.mjs scripts/public-release.test.mjs"
+    "test": "node --test scripts/mcp-integration.test.mjs scripts/mcp-stdio.test.mjs scripts/capability-installer.test.mjs scripts/public-release.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.4.0",
