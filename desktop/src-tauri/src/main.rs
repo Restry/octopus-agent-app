@@ -188,6 +188,9 @@ fn main() {
             let mut child = Command::new(node)
                 .arg(runtime.join("scripts/server.mjs"))
                 .current_dir(&runtime)
+                // EOF tells the service its native owner exited, even after SIGKILL.
+                .env("OCTOPUS_DESKTOP_PARENT", "1")
+                .stdin(Stdio::piped())
                 .env("OCTOPUS_BRIDGE_TOKEN", &token)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())

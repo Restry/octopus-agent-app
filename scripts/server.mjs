@@ -30,3 +30,8 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(port,'127.0.0.1',()=>console.log(`Octopus service ready http://127.0.0.1:${port} PID ${process.pid}`));
 for(const signal of ['SIGINT','SIGTERM'])process.once(signal,async()=>{await closeConnections();server.close(()=>process.exit());});
+// Only the native launcher owns this pipe; standalone servers may have closed stdin.
+if(process.env.OCTOPUS_DESKTOP_PARENT==='1'){
+ process.stdin.once('end',()=>process.kill(process.pid,'SIGTERM'));
+ process.stdin.resume();
+}

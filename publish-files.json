@@ -61,6 +61,7 @@
     "scripts/public-release.test.mjs",
     "scripts/release-assets.mjs",
     "scripts/server.mjs",
+    "scripts/server-lifecycle.test.mjs",
     "vendor/personal-agent-core-0.4.0.tgz"
   ]
 }
