@@ -1,6 +1,7 @@
 import {readFile,writeFile,rename,rm} from 'node:fs/promises';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {VaultError} from './model-config.mjs';
 
 const textLimit = 8192;
 const projectionLimit = 256 * 1024;
@@ -77,7 +78,7 @@ export class AgentRuns {
         clearTimeout(timer);
         run.state=error?'failed':reply.cancelled?'cancelled':reply.error || reply.events.some(event=>!event.ok)?'failed':'completed';
         if(reply)run.result={text:clipped(reply.text),events:reply.events.slice(-100).map(event=>({tool:clipped(event.tool),key:clipped(event.key),ok:event.ok,error:clipped(event.error)})),...(reply.error?{error:true}:{}),...(reply.cancelled?{cancelled:true}:{})};
-        if(error)run.error='执行失败，请检查配置及已完成操作。';
+        if(error)run.error=error instanceof VaultError ? error.message : '执行失败，请检查配置及已完成操作。';
         await save();
       },
     };

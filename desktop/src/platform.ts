@@ -12,7 +12,10 @@ export function clearPendingCopy() {
   clearTimeout(pendingTimer);
 }
 export async function api<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (native) return invoke<T>('agent_request',{command,args,onEvent:new Channel<AgentStreamEvent>()});
+  if (native) {
+    try { return await invoke<T>('agent_request',{command,args,onEvent:new Channel<AgentStreamEvent>()}); }
+    catch (error) { throw error instanceof Error ? error : new Error(typeof error === 'string' ? error : '本地服务请求失败'); }
+  }
   const response = await fetch(`/api/${command}`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args),cache:'no-store',credentials:'same-origin',redirect:'error'});
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : '本地服务请求失败');

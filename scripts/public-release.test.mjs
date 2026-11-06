@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createAssistantMessageEventStream} from '@earendil-works/pi-ai/utils/event-stream';
 import {createAgentService,loadConfig,saveConfig} from './agent-service.mjs';
+import {AgentRuns} from './agent-runs.mjs';
 
 test('public configuration reads backend-only credentials and updates never interrupt active runs',async()=>{
   const directory=await mkdtemp(path.join(tmpdir(),'octopus-public-'));
@@ -45,6 +46,35 @@ test('public configuration reads backend-only credentials and updates never inte
     assert.equal(JSON.stringify(await loadConfig()).includes(credential),false);
   } finally {
     release?.();for(const name of names)if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];
+    await rm(directory,{recursive:true,force:true});
+  }
+});
+
+test('missing model configuration and credentials remain actionable after run recovery',async()=>{
+  const directory=await mkdtemp(path.join(tmpdir(),'octopus-missing-model-'));
+  const names=['OCTOPUS_DATA_DIR','OCTOPUS_AGENT_DIR','OCTOPUS_MODEL_CONFIG','OCTOPUS_MODEL_BASE_URL'];
+  const previous=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+  process.env.OCTOPUS_DATA_DIR=directory;process.env.OCTOPUS_AGENT_DIR=path.join(directory,'sessions');process.env.OCTOPUS_MODEL_CONFIG=path.join(directory,'model.json');delete process.env.OCTOPUS_MODEL_BASE_URL;
+  try {
+    const service=createAgentService();
+    const {sessionId}=await service('agent_session_new');
+    for(const [id,expected] of [['missing-config','指定的模型配置文件不存在'],['missing-key','模型密钥缺失或权限不安全：请创建权限 600 的本机 model-api-key 文件']]) {
+      await assert.rejects(service('agent_run',{id,sessionId,intent:'你好'}),error=>error.status===503&&error.message===expected);
+      const recovered=await service('agent_session_open',{sessionId});
+      assert.equal(recovered.run.state,'failed');
+      assert.equal(recovered.run.error,expected);
+      assert.equal(recovered.messages.length,0);
+      if(id==='missing-config') await service('agent_configure',{config:{baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',credentialRef:'file/model-api-key'},confirmEndpoint:true});
+    }
+    const runs=new AgentRuns(path.join(directory,'sessions'));
+    const projection=runs.start(sessionId,'unknown-error',{messages:[],activities:[],nextCursor:null});
+    await projection.finish(undefined,Object.assign(new Error('private backend diagnostic'),{status:503}));
+    const recovered=await runs.read(sessionId);
+    assert.equal(recovered.state,'failed');
+    assert.equal(recovered.error,'执行失败，请检查配置及已完成操作。');
+    assert.equal(JSON.stringify(recovered).includes('private backend diagnostic'),false);
+  } finally {
+    for(const name of names)if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];
     await rm(directory,{recursive:true,force:true});
   }
 });

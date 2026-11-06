@@ -57,7 +57,7 @@ async fn agent_request(
             if event["type"] == "done" {
                 reply = Some(event["result"].clone());
             } else if event["type"] == "error" {
-                return Err("任务失败，请恢复会话".into());
+                return Err(event["error"].as_str().unwrap_or("任务失败，请恢复会话").into());
             } else {
                 let _ = on_event.send(event);
             }
