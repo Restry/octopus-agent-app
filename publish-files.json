@@ -1,5 +1,5 @@
 {
-  "version": "0.2.4",
+  "version": "0.2.5",
   "licenseGate": "vendor/personal-agent-core-0.4.0.tgz requires author redistribution and source publication permission before public release",
   "excluded": [
     "scripts/local-request.mjs"

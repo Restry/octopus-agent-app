@@ -20,7 +20,7 @@ console.log(`Building octopus-agent-app ${version} from ${root} for darwin-aarch
 await run(process.execPath,[path.join(root,'scripts/release-assets.mjs'),'--capture-source']);
 await rm(runtime,{recursive:true,force:true});
 await mkdir(path.join(runtime,'scripts'),{recursive:true});
-for(const file of ['agent-service.mjs','agent-memory.mjs','agent-provider-diagnostics.mjs','agent-runs.mjs','model-catalog.mjs','model-config.mjs','mcp-client.mjs','capability-installer.mjs','server.mjs'])await copyFile(path.join(root,'scripts',file),path.join(runtime,'scripts',file));
+for(const file of ['agent-service.mjs','agent-memory.mjs','agent-provider-diagnostics.mjs','agent-runs.mjs','model-catalog.mjs','model-config.mjs','model-no-auth.mjs','mcp-client.mjs','capability-installer.mjs','server.mjs'])await copyFile(path.join(root,'scripts',file),path.join(runtime,'scripts',file));
 await cp(path.join(root,'packages'),path.join(runtime,'packages'),{recursive:true});
 await cp(path.join(root,'vendor'),path.join(runtime,'vendor'),{recursive:true});
 for(const file of ['package.json','package-lock.json'])await copyFile(path.join(root,file),path.join(runtime,file));
@@ -28,5 +28,7 @@ await copyFile(process.execPath,path.join(runtime,'node'));await chmod(path.join
 // Retain the debug runtime location used by the native smoke runner.
 await copyFile(process.execPath,path.join(resources,'node'));await chmod(path.join(resources,'node'),0o755);
 await run('npm',['ci','--omit=dev','--ignore-scripts','--no-audit','--no-fund'],runtime);
+// Validate the staged production import closure before native compilation/signing.
+await run(path.join(runtime,'node'),['--input-type=module','-e','await import("./scripts/agent-service.mjs"); console.log("Staged runtime import check passed");'],runtime);
 await run(path.join(root,'node_modules/.bin/tauri'),['build','--bundles',process.env.OCTOPUS_BUNDLES||'app,dmg'],path.join(root,'desktop'));
 await run(process.execPath,[path.join(root,'scripts/release-assets.mjs')]);
