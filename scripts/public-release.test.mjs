@@ -24,9 +24,9 @@ test('public configuration reads backend-only credentials and updates never inte
     await assert.rejects(loadConfig(),/配置文件不存在/);
     const config={baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',credentialRef:'file/model-api-key'};
     await assert.rejects(service('agent_configure',{config}),/确认/);
-    assert.deepEqual(await service('agent_configure',{config,confirmEndpoint:true}),config);
-    assert.equal((await lstat(process.env.OCTOPUS_MODEL_CONFIG)).mode&0o777,0o600);
     await writeFile(path.join(directory,'model-api-key'),credential,{mode:0o600});
+    assert.deepEqual(await service('agent_configure',{config,confirmEndpoint:true}),{...config,authRequired:true,credentialSource:'direct',directKeyPresent:true});
+    assert.equal((await lstat(process.env.OCTOPUS_MODEL_CONFIG)).mode&0o777,0o600);
     assert.equal(JSON.stringify(await service('agent_config')).includes(credential),false);
     await assert.rejects(saveConfig({...config,baseUrl:'http://127.0.0.1/v1'}));
     await service('agent_update_lock',{locked:true});
@@ -64,7 +64,7 @@ test('missing model configuration and credentials remain actionable after run re
       assert.equal(recovered.run.state,'failed');
       assert.equal(recovered.run.error,expected);
       assert.equal(recovered.messages.length,0);
-      if(id==='missing-config') await service('agent_configure',{config:{baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',credentialRef:'file/model-api-key'},confirmEndpoint:true});
+      if(id==='missing-config') await writeFile(process.env.OCTOPUS_MODEL_CONFIG,JSON.stringify({baseUrl:'https://api.openai.com/v1',model:'gpt-4.1-mini',credentialRef:'file/model-api-key'}),{mode:0o600});
     }
     const runs=new AgentRuns(path.join(directory,'sessions'));
     const projection=runs.start(sessionId,'unknown-error',{messages:[],activities:[],nextCursor:null});

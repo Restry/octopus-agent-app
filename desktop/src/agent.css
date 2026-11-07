@@ -114,3 +114,29 @@
     max-height: 640px;
   }
 }
+.agent-panel .cp-auxiliary.agent-settings { position: absolute; top: var(--cp-header); left: 0; right: 0; z-index: 2; padding: 0; height: min(400px, calc(100% - var(--cp-header) - 12px)); max-height: none; overflow: hidden; background: #fafbfc; }
+.agent-settings form { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.agent-settings-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px; border-bottom: 1px solid #e4e6e9; flex-shrink: 0; }
+.agent-panel .agent-settings-tabs button { margin: 0; padding: 5px 4px; min-height: 32px; font-size: 13px; }
+.agent-settings-tabs [aria-selected="true"] { color: #245f4b; border-color: #8aaf9e !important; background: #edf4f0 !important; }
+.agent-settings-body { flex: 1; padding: 8px 10px; overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.agent-settings [hidden] { display: none !important; }
+.agent-settings section { min-width: 0; overflow-wrap: anywhere; }
+.agent-settings p { margin: 0 0 8px; color: #686e74; font-size: 13px; line-height: 1.45; }
+.agent-panel .agent-settings input:not([type="checkbox"]), .agent-panel .agent-settings select, .agent-panel .agent-settings textarea { min-width: 0; width: 100%; box-sizing: border-box; min-height: 32px; padding: 5px 7px; font-size: 13px; line-height: 20px; border: 1px solid #dcdee1; border-radius: 6px; background: #fff; }
+.agent-panel .agent-settings .agent-setting-row { display: grid; grid-template-columns: 66px minmax(0, 1fr); align-items: center; gap: 8px; margin: 0 0 8px; line-height: 20px; }
+.agent-panel .agent-settings .agent-auth-toggle { min-height: 32px; grid-template-columns: 1fr auto; border-top: 1px solid #e4e6e9; padding-top: 8px; }
+.agent-panel .agent-settings input[role="switch"] { appearance: none; width: 32px; height: 20px; border-radius: 12px; border: 1px solid #a6adb0; padding: 2px; background: #c6ccca; cursor: pointer; }
+.agent-settings input[role="switch"]::before { content: ''; display: block; width: 14px; height: 14px; border-radius: 50%; background: white; box-shadow: 0 1px 2px #0003; }
+.agent-panel .agent-settings input[role="switch"]:checked { background: #1d6b52; border-color: #1d6b52; }
+.agent-settings input[role="switch"]:checked::before { transform: translateX(12px); }
+.agent-panel .agent-settings .agent-check { align-items: flex-start; margin: 8px 0 0; gap: 6px; font-size: 13px; line-height: 20px; }
+.agent-settings input[type="checkbox"] { flex-shrink: 0; }
+.agent-settings-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 10px; border-top: 1px solid #e4e6e9; flex-shrink: 0; }
+.agent-panel .agent-settings-actions button { margin: 0; min-height: 32px; padding: 5px 10px; font-size: 13px; }
+.agent-settings-actions [data-save] { background: #1d6b52 !important; border-color: #1d6b52 !important; color: #fff; }
+.agent-settings :focus-visible { outline: 2px solid #1d6b52; outline-offset: 2px; }
+.agent-panel .agent-settings .agent-packages { margin: 0 0 10px; padding-bottom: 10px; font-size: 13px; }
+.agent-settings .agent-packages:last-child { margin-bottom: 0; border-bottom: 0; }
+.agent-settings .agent-package small { font-size: 13px; }
+.agent-panel .agent-settings .agent-packages button { min-height: 32px; margin: 4px 4px 4px 0; padding: 5px 8px; font-size: 13px; }

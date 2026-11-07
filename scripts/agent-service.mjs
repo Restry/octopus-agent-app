@@ -8,7 +8,7 @@ import { OPENAI_MODELS } from '@earendil-works/pi-ai/providers/openai.models';
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, lstat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, lstat, chmod, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -16,6 +16,7 @@ import { createVault, validKey, VaultError } from './model-config.mjs';
 import { modelCatalog } from './model-catalog.mjs';
 import { AgentRuns } from './agent-runs.mjs';
 import { safeProviderDiagnostic, tapProviderResponse } from './agent-provider-diagnostics.mjs';
+import { streamWithoutAuth } from './model-no-auth.mjs';
 
 const appDirectory = () => process.env.OCTOPUS_DATA_DIR || path.join(homedir(), 'Library/Application Support/Octopus');
 const configFile = () => process.env.OCTOPUS_MODEL_CONFIG || path.join(appDirectory(), 'model.json');
@@ -51,6 +52,23 @@ export function splitValues(raw, project = '') {
     return {key, value, valueRef: randomUUID()};
   });
 }
+function credentialCliEnvironment() {
+  const home = homedir();
+  const directories = [path.join(home, '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin', ...(process.env.PATH || '').split(path.delimiter)];
+  return {...process.env,
+    PATH:[...new Set(directories.filter(directory => path.isAbsolute(directory)))].join(path.delimiter),
+    VAULT_DIR:process.env.VAULT_DIR ?? path.join(home, '.vault'),
+    VAULT_IDENTITY:process.env.VAULT_IDENTITY ?? path.join(home, '.ssh/id_rsa')};
+}
+function credentialCliFailure(error) {
+  let message;
+  if (error.code === 'ENOENT') message = '本机凭据 CLI 无法启动（ENOENT）：请检查 MENSHEN_VAULT_CLI 路径及入口解释器是否已安装';
+  else if (error.code === 'EACCES' || error.code === 'EPERM') message = '本机凭据 CLI 无法启动（权限不足）：请检查入口及目录的执行权限';
+  else if (error.code === 'ETIMEDOUT' || error.killed && error.signal === 'SIGTERM') message = '本机凭据 CLI 读取超时：请检查本机运行环境后重试';
+  else if (Number.isInteger(error.code)) message = '本机凭据 CLI 执行失败（非零退出）：请在本机检查 CLI 依赖、仓库及身份配置';
+  else message = '本机凭据 CLI 读取失败：请检查本机 CLI 运行环境';
+  return new VaultError(message,503);
+}
 async function privateGet(key) {
   if (!validKey(key)) fail('凭据引用无效');
   if (key.startsWith('env/')) {
@@ -69,7 +87,9 @@ async function privateGet(key) {
     } catch { fail('模型密钥缺失或权限不安全：请创建权限 600 的本机 model-api-key 文件',503); }
   }
   // Legacy references are used only when explicitly present in local configuration.
-  return new Promise((resolve, reject) => execFile(process.env.MENSHEN_VAULT_CLI || path.join(homedir(), '.vault/bin/vault'), ['get', key], {timeout:15000,maxBuffer:65536}, (error, stdout) => error ? reject(new VaultError('无法读取本机旧版凭据引用',503)) : resolve(stdout.trim())));
+  const value = await new Promise((resolve, reject) => execFile(process.env.MENSHEN_VAULT_CLI || path.join(homedir(), '.vault/bin/vault'), ['get', key], {env:credentialCliEnvironment(),timeout:15000,maxBuffer:65536}, (error, stdout) => error ? reject(credentialCliFailure(error)) : resolve(stdout.trim())));
+  if (!value) fail('本机凭据 CLI 未返回密钥：请在本机检查所选引用',503);
+  return value;
 }
 function endpoint(value) {
   let url; try { url = new URL(value); } catch { fail('端点无效'); }
@@ -97,18 +117,72 @@ export async function loadConfig() {
   } catch (error) { throw error instanceof VaultError ? error : new VaultError('模型配置读取失败',503); }
 }
 function validateConfig(data) {
-  if (!data || typeof data.model !== 'string' || !/^[a-zA-Z0-9_.-]{1,100}$/.test(data.model) || !validKey(data.credentialRef)) fail('模型或凭据引用无效');
-  return {baseUrl:endpoint(data.baseUrl),model:data.model,credentialRef:data.credentialRef};
+  if (!data || typeof data.model !== 'string' || !/^[a-zA-Z0-9_.-]{1,100}$/.test(data.model)) fail('模型无效');
+  const authRequired = data.authRequired ?? true;
+  if (typeof authRequired !== 'boolean') fail('认证开关无效');
+  const credentialSource = data.credentialSource ?? (data.credentialRef === 'file/model-api-key' ? 'direct' : data.credentialRef?.startsWith('env/') ? 'env' : 'menshen');
+  if (!['menshen','direct','env'].includes(credentialSource)) fail('密钥来源无效');
+  const credentialRef = credentialSource === 'direct' ? 'file/model-api-key' : data.credentialRef;
+  if ((authRequired || credentialRef) && (!validKey(credentialRef) || credentialSource === 'env' && !/^env\/[A-Z][A-Z0-9_]*$/.test(credentialRef) || credentialSource === 'menshen' && /^(env|file)\//.test(credentialRef))) fail('凭据引用无效');
+  return {baseUrl:endpoint(data.baseUrl),model:data.model,authRequired,credentialSource,...(credentialRef ? {credentialRef} : {})};
 }
 export async function saveConfig(data) {
-  const config = validateConfig(data);
-  await mkdir(path.dirname(configFile()),{recursive:true,mode:0o700});
-  try { if ((await lstat(configFile())).isSymbolicLink()) fail('拒绝符号链接配置'); } catch(e) { if(e.code !== 'ENOENT') throw e; }
-  const temporary = `${configFile()}.${randomUUID()}.pending`;
-  await writeFile(temporary,JSON.stringify(config,null,2)+'\n',{mode:0o600,flag:'wx'});
-  await rename(temporary,configFile());
-  return config;
+  let apiKey = data?.apiKey;
+  if (data && typeof data === 'object') delete data.apiKey;
+  let temporary, keyPending, previousKey, keyChanged = false;
+  const keyFile = path.join(appDirectory(), 'model-api-key');
+  try {
+    let previous = {};
+    try { previous = await loadConfig(); } catch (error) {
+      // A fresh isolated setup may have no configuration. Never replace an unreadable existing file.
+      try { await lstat(configFile()); throw error; } catch (missing) { if (missing.code !== 'ENOENT') throw missing; }
+    }
+    const config = validateConfig({...previous,...data});
+    if (apiKey !== undefined && (typeof apiKey !== 'string' || apiKey.length > 16384 || /[\r\n\u0000]/.test(apiKey))) fail('模型密钥格式无效');
+    apiKey = apiKey?.trim() || '';
+    if (apiKey && (config.credentialSource !== 'direct' || !config.authRequired)) fail('仅直接输入且需要密钥时可保存密钥');
+    if (config.authRequired && config.credentialSource === 'direct' && !apiKey) await privateGet('file/model-api-key');
+    await mkdir(path.dirname(configFile()),{recursive:true,mode:0o700});
+    try { if ((await lstat(configFile())).isSymbolicLink()) fail('拒绝符号链接配置'); } catch(e) { if(e.code !== 'ENOENT') throw e; }
+    temporary = `${configFile()}.${randomUUID()}.pending`;
+    await writeFile(temporary,JSON.stringify(config,null,2)+'\n',{mode:0o600,flag:'wx'});
+    if (apiKey) {
+      await mkdir(appDirectory(),{recursive:true,mode:0o700});
+      if ((await lstat(appDirectory())).isSymbolicLink()) fail('拒绝符号链接密钥目录');
+      await chmod(appDirectory(),0o700);
+      try {
+        const info = await lstat(keyFile);
+        if (!info.isFile() || info.isSymbolicLink() || info.mode & 0o077) fail('模型密钥文件权限不安全');
+        previousKey = await readFile(keyFile);
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      keyPending = `${keyFile}.${randomUUID()}.pending`;
+      await writeFile(keyPending,apiKey+'\n',{mode:0o600,flag:'wx'});
+      await rename(keyPending,keyFile);
+      keyChanged = true;
+    }
+    await rename(temporary,configFile());
+    keyChanged = false;
+    return publicConfig(config);
+  } catch (error) {
+    if (keyChanged) {
+      if (previousKey) { await writeFile(keyPending,previousKey,{mode:0o600,flag:'wx'}); await rename(keyPending,keyFile); }
+      else await rm(keyFile,{force:true});
+    }
+    throw error instanceof VaultError ? error : new VaultError('模型配置保存失败，请检查本机文件权限',503);
+  } finally {
+    apiKey = '';
+    previousKey?.fill(0);
+    if (temporary) await rm(temporary,{force:true}).catch(()=>{});
+    if (keyPending) await rm(keyPending,{force:true}).catch(()=>{});
+  }
 }
+async function publicConfig(settings) {
+  const safe = validateConfig(settings);
+  let directKeyPresent = false;
+  try { const info = await lstat(path.join(appDirectory(),'model-api-key')); directKeyPresent = info.isFile() && !info.isSymbolicLink() && !(info.mode & 0o077) && info.size > 0; } catch { /* Presence only; never return secret bytes. */ }
+  return {...safe,directKeyPresent};
+}
+const requiresAuth = settings => settings.authRequired !== false;
 const result = data => ({content:[{type:'text',text:JSON.stringify(data)}],details:undefined});
 // Provider text is untrusted: expose a reason category and allowlisted parameter, never raw diagnostics.
 function modelFailure(status, error = {}, metadata = {}) {
@@ -218,9 +292,10 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
   let updateInstalling = false;
   const catalog = async (settings, refresh = false) => modelCatalog(settings, refresh, async () => {
     const baseUrl = endpoint(settings.baseUrl);
+    const apiKey = requiresAuth(settings) ? await key(settings.credentialRef) : undefined;
     let response;
     try {
-      response = await fetch(`${baseUrl}/models`, {headers:{Authorization:`Bearer ${await key(settings.credentialRef)}`},redirect:'error',signal:AbortSignal.timeout(15000)});
+      response = await fetch(`${baseUrl}/models`, {headers:apiKey ? {Authorization:`Bearer ${apiKey}`} : {},redirect:'error',signal:AbortSignal.timeout(15000)});
     } catch { fail('模型目录连接失败，请重试；当前模型未更改',503); }
     if (!response.ok) fail(`模型目录请求失败（${response.status}），当前模型未更改`,503);
     let data;
@@ -297,8 +372,8 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
       await refreshCapabilities();
       const selected = await instance.forSession(input.manager);
       const settings = await config();
-      let apiKey = await key(settings.credentialRef);
-      privateStrings.push(apiKey);
+      let apiKey = requiresAuth(settings) ? await key(settings.credentialRef) : undefined;
+      if (apiKey) privateStrings.push(apiKey);
       projection?.validated(redact(intent), values.map(v=>v.key));
       if (cancelled) fail('已取消',409);
       const initial = {keys:[],projects:{},secrets_meta:{}};
@@ -339,7 +414,7 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
           responseMetadata = {...responseMetadata,providerFailure:true,provider};
           capture({});
         };
-        return modelStream(m,normalizeContext(c),{...o,apiKey,maxRetries:0,timeoutMs:60000,onPayload:inspectPayload ? p=>{inspectPayload(p);} : undefined,
+        return (requiresAuth(settings) ? modelStream : streamWithoutAuth)(m,normalizeContext(c),{...o,apiKey,maxRetries:0,timeoutMs:60000,onPayload:inspectPayload ? p=>{inspectPayload(p);} : undefined,
           onProviderStreamEvent:event => {
             const provider = safeProviderDiagnostic(event);
             if (provider) captureProvider(provider);
@@ -347,7 +422,11 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
           },
           fetch:async (url,options) => {
             let response;
-            try { response = await fetch(url,{...options,redirect:'error'}); }
+            try {
+              const headers = new Headers(options?.headers);
+              if (!requiresAuth(settings)) for (const name of ['authorization','api-key','x-api-key','proxy-authorization','openai-organization','openai-project']) headers.delete(name);
+              response = await fetch(url,{...options,headers,redirect:'error'});
+            }
             catch (error) {
               capture(error);
               throw error;
@@ -483,7 +562,7 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
       return current ? {...history,run:current} : history;
     }
     if(command === 'agent_session_delete') { const deleted = await runtime.remove(args.sessionId); await runs.remove(args.sessionId); return deleted; }
-    if(command === 'agent_config') return config();
+    if(command === 'agent_config') return publicConfig(await config());
     if(command === 'agent_update_status') return {busy:owned.size > 0 || active.size > 0 || configuring};
     if(command === 'agent_update_lock') {
       if (args.locked === true && (owned.size || active.size || configuring)) fail('Agent 正忙，请等待任务结束后更新',409);
@@ -496,8 +575,10 @@ export function createAgentService({vault = createVault(), config = loadConfig, 
       configuring = true;
       try {
         if (command === 'agent_configure') {
-          if (args.confirmEndpoint !== true) fail('请确认向此端点发送对话');
-          return await saveConfig(args.config);
+          try {
+            if (args.confirmEndpoint !== true) fail('请确认向此端点发送对话');
+            return await saveConfig(args.config);
+          } finally { if (args.config) delete args.config.apiKey; }
         }
         const previous = await config();
         if (args.expectedModel !== previous.model) fail('模型配置已更改，请重新加载',409);

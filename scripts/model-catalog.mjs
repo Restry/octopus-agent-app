@@ -8,7 +8,7 @@ const caches = new Map();
 // Native launches short-lived sidecars: persist only model IDs and freshness, never credentials.
 export async function modelCatalog(settings, refresh, fetchModels) {
   const directory = process.env.OCTOPUS_DATA_DIR || path.join(homedir(), 'Library/Application Support/Octopus');
-  const identity = createHash('sha256').update(JSON.stringify([settings.baseUrl, settings.credentialRef])).digest('hex');
+  const identity = createHash('sha256').update(JSON.stringify([settings.baseUrl, settings.authRequired !== false, settings.credentialSource, settings.credentialRef])).digest('hex');
   const cacheKey = `${directory}:${identity}`;
   let entry = caches.get(cacheKey);
   if (!entry) {

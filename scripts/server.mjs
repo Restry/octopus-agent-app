@@ -13,7 +13,7 @@ const agent=createAgentService();
 const dist=fileURLToPath(new URL('../desktop/dist/',import.meta.url));
 const server=http.createServer(async(req,res)=>{
  const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
- if(req.headers.host!==`127.0.0.1:${port}`||req.headers.origin&&req.headers.origin!==`http://127.0.0.1:${port}`||req.headers['sec-fetch-site']==='cross-site')return send(403,{error:'请求被拒绝'});
+ if(req.headers.host!==`127.0.0.1:${server.address().port}`||req.headers.origin&&req.headers.origin!==`http://127.0.0.1:${server.address().port}`||req.headers['sec-fetch-site']==='cross-site')return send(403,{error:'请求被拒绝'});
  if(req.method==='GET'&&req.url==='/health')return send(200,{ready:true});
  if(req.method==='POST'&&/^\/api\/[a-z_]+$/.test(req.url)){
   const auth=req.headers.authorization||'';const expected=`Bearer ${token}`;if(Buffer.byteLength(auth)!==Buffer.byteLength(expected)||!timingSafeEqual(Buffer.from(auth),Buffer.from(expected)))return send(401,{error:'原生桥认证失败'});
@@ -28,7 +28,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method!=='GET')return send(404,{error:'未知请求'});
  try{const file=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));const target=path.resolve(dist,file);if(!target.startsWith(dist))throw new Error();const content=await readFile(target);res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream'});res.end(content);}catch{send(404,{error:'未找到资源'});}
 });
-server.listen(port,'127.0.0.1',()=>console.log(`Octopus service ready http://127.0.0.1:${port} PID ${process.pid}`));
+server.listen(port,'127.0.0.1',()=>console.log(`Octopus service ready http://127.0.0.1:${server.address().port} PID ${process.pid}`));
 for(const signal of ['SIGINT','SIGTERM'])process.once(signal,async()=>{await closeConnections();server.close(()=>process.exit());});
 // Only the native launcher owns this pipe; standalone servers may have closed stdin.
 if(process.env.OCTOPUS_DESKTOP_PARENT==='1'){

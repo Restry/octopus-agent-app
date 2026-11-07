@@ -18,7 +18,7 @@ type Reply = {
   error?: boolean;
   cancelled?: boolean;
 };
-type Config = { baseUrl: string; model: string; credentialRef: string };
+type Config = { baseUrl: string; model: string; credentialRef?: string; authRequired: boolean; credentialSource: 'menshen'|'direct'|'env'; directKeyPresent?: boolean };
 // Split locally before rendering a user bubble or sending any model intent.
 function splitMessage(raw: string, defaultProject: string, knownKeys: string[] = []) {
   if (raw.length > 65536) throw new Error("消息超过 64 KiB。");
@@ -165,7 +165,7 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
   let installingUpdate = false;
   const updater = createUpdater(() => model.busy || preparing || !!model.modelChanging, value => { installingUpdate = value; });
   const catalogRequests = new Map<string, Promise<{models:string[];current:string}>>();
-  const catalogIdentity = (config: Config) => JSON.stringify([config.baseUrl, config.credentialRef]);
+  const catalogIdentity = (config: Config) => JSON.stringify([config.baseUrl, config.authRequired, config.credentialSource, config.credentialRef]);
   let configRequest = 0;
   const loadConfiguration = async () => {
     const request = ++configRequest;
@@ -293,6 +293,8 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
     updater.refresh();
   };
   const hideAux = () => {
+    view.auxiliary.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
+    view.auxiliary.classList.remove('agent-settings');
     section = "";
     view.auxiliary.hidden = true;
     view.auxiliary.replaceChildren();
@@ -382,6 +384,8 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
       return false;
     }
     section = name;
+    view.auxiliary.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
+    view.auxiliary.classList.remove('agent-settings');
     view.setModelPickerOpen(false);
     view.auxiliary.replaceChildren();
     view.auxiliary.hidden = false;
@@ -394,63 +398,127 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
     button.onclick = fn;
     return button;
   };
-  const settings = async () => {
+  const settings = async (initialTab = 'model') => {
     if (model.modelChanging || !aux("settings")) return;
-    const form = document.createElement("form");
-    form.id = "agent-config-form";
-    form.innerHTML =
-      '<p role="status">正在读取本机配置…</p><fieldset disabled><label>HTTPS 模型端点<input name="baseUrl" required autocomplete="off" placeholder="https://api.openai.com/v1"></label><label>模型（需支持 Responses API）<input name="model" required autocomplete="off"></label><label>本机密钥引用<input name="credentialRef" required autocomplete="off" placeholder="file/model-api-key"></label><p>密钥只在后端读取：本机 model-api-key 文件（权限 600），或 env/OPENAI_API_KEY 环境变量。不要在聊天中粘贴模型密钥。</p><label>默认项目<input name="project" placeholder="default" maxlength="100"></label><label class="agent-check"><input name="confirm" type="checkbox" required>确认向此端点发送对话和工具结果</label><button type="submit">保存本机配置</button></fieldset>';
+    view.auxiliary.classList.add('agent-settings');
+    const form = document.createElement('form');
+    form.id = 'agent-config-form';
+    form.innerHTML = `<div class="agent-settings-tabs" role="tablist" aria-label="设置分类"></div>
+      <div class="agent-settings-body">
+        <section id="settings-model" role="tabpanel" aria-labelledby="tab-model">
+          <p role="status">正在读取本机配置…</p><fieldset disabled>
+          <label class="agent-setting-row">端点<input name="baseUrl" required autocomplete="off" placeholder="https://api.openai.com/v1" aria-label="HTTPS 模型端点"></label>
+          <label class="agent-setting-row">模型<input name="model" required autocomplete="off" aria-label="模型（需支持 Responses API）"></label>
+          <label class="agent-setting-row agent-auth-toggle">需要密钥<input name="authRequired" type="checkbox" role="switch" checked></label>
+          <label class="agent-setting-row" data-auth>来源<select name="credentialSource"><option value="menshen">门神（本机命令）</option><option value="direct">直接输入</option></select></label>
+          <label class="agent-setting-row" data-reference>凭据引用<input name="credentialRef" autocomplete="off" placeholder="project/MODEL_KEY"></label>
+          <label class="agent-setting-row" data-direct hidden>API 密钥<input name="apiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="输入密钥"></label>
+          <p class="agent-setting-hint" data-auth-status></p>
+          <label class="agent-check"><input name="confirm" type="checkbox" required>确认向此端点发送对话和工具结果</label>
+          </fieldset>
+        </section>
+        <section id="settings-extensions" role="tabpanel" aria-labelledby="tab-extensions" hidden></section>
+        <section id="settings-memory" role="tabpanel" aria-labelledby="tab-memory" hidden></section>
+        <section id="settings-app" role="tabpanel" aria-labelledby="tab-app" hidden>
+          <label class="agent-setting-row">默认项目<input name="project" placeholder="default" maxlength="100"></label>
+          <button type="button" data-project-save>保存默认项目</button><p role="status" data-project-status></p>
+        </section>
+      </div><div class="agent-settings-actions"><button type="button" data-cancel>取消</button><button type="submit" data-save disabled>保存模型</button></div>`;
     view.auxiliary.append(form);
-    updater.mount(view.auxiliary);
-    mountPackages(view.auxiliary);
-    mountMemory(view.auxiliary);
-    mountMcpSettings(view.auxiliary,async()=>{await ensureSession();return activeId;});
-    const fieldset = form.querySelector("fieldset")!;
-    const status = form.querySelector("p")!;
-    const current = () => section === "settings" && view.auxiliary.contains(form);
-    // Bind synchronously: an early Enter must never perform the browser's default form navigation.
-    form.onsubmit = async (event) => {
-      event.preventDefault();
-      if (fieldset.disabled || model.busy || model.modelChanging) return;
-      const data = new FormData(form);
-      fieldset.disabled = true;
-      model.modelChanging = true;
-      render();
-      try {
-        const saved = await api<Config>("agent_configure", {
-          config: {baseUrl:data.get("baseUrl"),model:data.get("model"),credentialRef:data.get("credentialRef")},
-          confirmEndpoint: data.get("confirm") === "on",
-        });
-        configuration = saved;
-        model.modelLabel = saved.model;
-        project = String(data.get("project") || "").trim();
-        if (current()) hideAux();
-        model.status = "模型配置已保存到本机。";
-      } catch (error) {
-        status.textContent = error instanceof Error ? error.message : "配置保存失败，请重试。";
-        fieldset.disabled = false;
-      } finally { model.modelChanging = false; render(); }
-    };
-    const load = async () => {
-      status.textContent = "正在读取本机配置…";
-      try {
-        const loaded = await loadConfiguration();
-        if (!current() || !loaded) return;
-        for (const name of ["baseUrl", "model", "credentialRef"] as const)
-          (form.elements.namedItem(name) as HTMLInputElement).value = loaded[name];
-        (form.elements.namedItem("project") as HTMLInputElement).value = project;
-        fieldset.disabled = false;
-        status.textContent = '配置已读取；模型密钥只由后端读取。';
-      } catch {
-        if (!current()) return;
-        status.textContent = '请填写模型配置；密钥另存本机文件或环境变量。';
-        (form.elements.namedItem('baseUrl') as HTMLInputElement).value = 'https://api.openai.com/v1';
-        (form.elements.namedItem('model') as HTMLInputElement).value = 'gpt-4.1-mini';
-        (form.elements.namedItem('credentialRef') as HTMLInputElement).value = 'file/model-api-key';
-        fieldset.disabled = false;
+    const fieldset = form.querySelector('fieldset')!;
+    const status = form.querySelector<HTMLElement>('[role="status"]')!;
+    const save = form.querySelector<HTMLButtonElement>('[data-save]')!;
+    const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+    const source = form.elements.namedItem('credentialSource') as HTMLSelectElement;
+    const password = input('apiKey');
+    const current = () => section === 'settings' && view.auxiliary.contains(form);
+    const clearPassword = () => { password.value = ''; };
+    const closeSettings = () => { clearPassword(); hideAux(); view.focus(); };
+    form.querySelector<HTMLButtonElement>('[data-cancel]')!.onclick = closeSettings;
+    const tabs = [['model','模型'],['extensions','扩展'],['memory','记忆'],['app','应用']];
+    const tablist = form.querySelector<HTMLElement>('[role="tablist"]')!;
+    const selectTab = (name: string, focus = false) => {
+      clearPassword();
+      for (const [id] of tabs) {
+        const selected = id === name;
+        const tab = form.querySelector<HTMLButtonElement>(`#tab-${id}`)!;
+        tab.setAttribute('aria-selected',String(selected)); tab.tabIndex = selected ? 0 : -1;
+        form.querySelector<HTMLElement>(`#settings-${id}`)!.hidden = !selected;
+        if (selected && focus) tab.focus();
       }
+      save.hidden = name !== 'model';
+      form.querySelector('.agent-settings-body')!.scrollTop = 0;
     };
-    await load();
+    tabs.forEach(([id,label],index) => {
+      const tab = action(label,()=>selectTab(id)); tab.id = `tab-${id}`;
+      tab.setAttribute('role','tab'); tab.setAttribute('aria-controls',`settings-${id}`);
+      tab.onkeydown = event => {
+        const next = event.key === 'ArrowRight' ? (index+1)%tabs.length : event.key === 'ArrowLeft' ? (index+tabs.length-1)%tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length-1 : -1;
+        if (next >= 0) { event.preventDefault(); selectTab(tabs[next][0],true); }
+      };
+      tablist.append(tab);
+    });
+    const extensionPanel = form.querySelector<HTMLElement>('#settings-extensions')!;
+    mountMcpSettings(extensionPanel,async()=>{await ensureSession();return activeId;});
+    mountPackages(extensionPanel);
+    mountMemory(form.querySelector<HTMLElement>('#settings-memory')!);
+    form.querySelector<HTMLDetailsElement>('#settings-memory details')!.open = true;
+    updater.mount(form.querySelector<HTMLElement>('#settings-app')!);
+    input('project').value = project;
+    form.querySelector<HTMLButtonElement>('[data-project-save]')!.onclick = () => {
+      project = input('project').value.trim();
+      form.querySelector<HTMLElement>('[data-project-status]')!.textContent = '默认项目已应用。';
+    };
+    const drawAuth = () => {
+      const required = input('authRequired').checked;
+      const direct = source.value === 'direct';
+      form.querySelectorAll<HTMLElement>('[data-auth]').forEach(row=>{row.hidden = !required;});
+      form.querySelector<HTMLElement>('[data-direct]')!.hidden = !required || !direct;
+      form.querySelector<HTMLElement>('[data-reference]')!.hidden = !required || direct;
+      input('credentialRef').required = required && !direct;
+      password.disabled = !required || !direct;
+      source.disabled = !required;
+      form.querySelector<HTMLElement>('[data-auth-status]')!.textContent = !required ? '免认证：不读取凭据，也不发送认证头。' : direct ? configuration?.directKeyPresent ? '已保存本机密钥；留空保留，输入可替换。' : '密钥仅存本机私有文件，保存后不回显。' : source.value === 'env' ? '保留现有环境变量引用；可切换至门神或直接输入。' : '模型启动前由固定本机 CLI 读取所选引用。';
+    };
+    input('authRequired').onchange = () => { clearPassword(); drawAuth(); };
+    source.onchange = () => {
+      clearPassword();
+      input('credentialRef').value = source.value === configuration?.credentialSource ? configuration.credentialRef || '' : '';
+      drawAuth();
+    };
+    selectTab(initialTab);
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (fieldset.disabled || model.busy || model.modelChanging || save.hidden) { clearPassword(); return; }
+      const config: Record<string,unknown> = {baseUrl:input('baseUrl').value,model:input('model').value,authRequired:input('authRequired').checked,credentialSource:source.value,credentialRef:input('credentialRef').value || undefined};
+      if (config.authRequired && source.value === 'direct' && password.value) config.apiKey = password.value;
+      clearPassword();
+      fieldset.disabled = save.disabled = true; model.modelChanging = true; render();
+      try {
+        const saved = await api<Config>('agent_configure',{config,confirmEndpoint:input('confirm').checked});
+        configuration = saved; catalogs.clear(); model.modelLabel = saved.model;
+        if (current()) closeSettings();
+        model.status = '模型配置已保存到本机。';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : '配置保存失败，请重试。';
+        fieldset.disabled = save.disabled = false; drawAuth();
+      } finally { delete config.apiKey; model.modelChanging = false; render(); }
+    };
+    try {
+      const loaded = await loadConfiguration();
+      if (!current() || !loaded) return;
+      input('baseUrl').value = loaded.baseUrl; input('model').value = loaded.model;
+      input('authRequired').checked = loaded.authRequired !== false;
+      if (loaded.credentialSource === 'env') source.add(new Option('环境变量（现有配置）','env'));
+      source.value = loaded.credentialSource;
+      input('credentialRef').value = loaded.credentialRef || '';
+      status.textContent = '模型需支持 Responses API。';
+    } catch {
+      if (!current()) return;
+      input('baseUrl').value = 'https://api.openai.com/v1'; input('model').value = 'gpt-4.1-mini';
+      status.textContent = '填写模型与认证方式。';
+    }
+    fieldset.disabled = save.disabled = false; drawAuth();
   };
   const chooseModel = async () => {
     if (model.busy || model.modelChanging) return;
@@ -670,9 +738,9 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
               void settings();
             }),
             action("添加 MCP", () => {
-              void settings();
+              void settings('extensions');
             }),
-            action('软件更新', () => { if (aux('updates')) updater.mount(view.auxiliary); }),
+            action('软件更新', () => { void settings('app'); }),
             action("重新加载会话", () => { void (activeId ? loadSession(activeId) : loadSessions()).catch(error=>{model.status=String(error);render();}); }),
             action("清除全部会话", () => { void (async () => {
               if (!window.confirm("删除后端全部 Personal Agent 会话？")) return;
@@ -707,7 +775,7 @@ export function mountAgent(refresh: () => Promise<void>, popover: boolean) {
   document.body.append(launcher, view.element);
   const mcpEntry=document.createElement('button');mcpEntry.type='button';mcpEntry.textContent='添加 MCP';mcpEntry.className='agent-mcp-entry';
   const mcpState=document.createElement('p');mcpState.setAttribute('role','status');
-  mcpEntry.onclick=()=>{void settings();};
+  mcpEntry.onclick=()=>{void settings('extensions');};
   const mcpBar=document.createElement('div');mcpBar.className='agent-mcp-bar';mcpBar.append(mcpState,mcpEntry);view.element.querySelector('.cp-bottom')!.prepend(mcpBar);
   const refreshMcpState=()=>{void api<{id:string;connected:boolean}[]>('connections').then(items=>{mcpState.textContent=items.length?items.map(c=>c.id+' · '+(c.connected?'已连接':'连接失败')).join('；'):'尚未添加 MCP';}).catch(()=>{mcpState.textContent='MCP 状态读取失败';});};
   window.addEventListener('octopus:connections-changed',refreshMcpState);refreshMcpState();
