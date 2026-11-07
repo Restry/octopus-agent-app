@@ -62,6 +62,20 @@ test('direct key save/get/reload, blank edits, endpoint failure and switching so
   assert.ok(!(await files(dir)).includes(direct));
 });
 
+test('disabled authentication discards invalid unused references without blocking save',async t=>{
+  const {dir}=await setup(t);
+  for (const [credentialSource,credentialRef] of [['menshen','unfinished'],['menshen','env/UNUSED'],['env','not-an-env-reference']]) {
+    const saved=await saveConfig({...base,authRequired:false,credentialSource,credentialRef});
+    assert.equal(saved.authRequired,false);
+    assert.equal(saved.credentialRef,undefined);
+    assert.equal((await loadConfig()).credentialRef,undefined);
+    assert.ok(!(await readFile(path.join(dir,'model.json'),'utf8')).includes(credentialRef));
+  }
+  await assert.rejects(saveConfig({...base,authRequired:true,credentialSource:'menshen',credentialRef:'unfinished'}),/凭据引用无效/);
+  const valid=await saveConfig({...base,authRequired:false,credentialSource:'menshen',credentialRef:'fixture/MODEL_KEY'});
+  assert.equal(valid.credentialRef,'fixture/MODEL_KEY');
+});
+
 test('all auth modes reach catalog and real Responses request boundary; no-auth ignores ambient secrets',async t=>{
   const {dir,service,requests}=await setup(t);
   const modes=[{authRequired:true,credentialSource:'direct',apiKey:direct}, {authRequired:true,credentialSource:'env',credentialRef:'env/OPENAI_API_KEY'}, {authRequired:false,credentialSource:'direct'}];

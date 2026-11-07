@@ -123,8 +123,9 @@ function validateConfig(data) {
   const credentialSource = data.credentialSource ?? (data.credentialRef === 'file/model-api-key' ? 'direct' : data.credentialRef?.startsWith('env/') ? 'env' : 'menshen');
   if (!['menshen','direct','env'].includes(credentialSource)) fail('密钥来源无效');
   const credentialRef = credentialSource === 'direct' ? 'file/model-api-key' : data.credentialRef;
-  if ((authRequired || credentialRef) && (!validKey(credentialRef) || credentialSource === 'env' && !/^env\/[A-Z][A-Z0-9_]*$/.test(credentialRef) || credentialSource === 'menshen' && /^(env|file)\//.test(credentialRef))) fail('凭据引用无效');
-  return {baseUrl:endpoint(data.baseUrl),model:data.model,authRequired,credentialSource,...(credentialRef ? {credentialRef} : {})};
+  const validReference = validKey(credentialRef) && (credentialSource !== 'env' || /^env\/[A-Z][A-Z0-9_]*$/.test(credentialRef)) && (credentialSource !== 'menshen' || !/^(env|file)\//.test(credentialRef));
+  if (authRequired && !validReference) fail('凭据引用无效');
+  return {baseUrl:endpoint(data.baseUrl),model:data.model,authRequired,credentialSource,...(validReference ? {credentialRef} : {})};
 }
 export async function saveConfig(data) {
   let apiKey = data?.apiKey;
