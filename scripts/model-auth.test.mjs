@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,stat,rm,readdir,mkdir} from 'node:fs/promises';
 import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {createAgentService,loadConfig,saveConfig} from './agent-service.mjs';
 
 const direct='fixture-direct-model-secret-129837';
@@ -14,7 +15,7 @@ export function fixtureResponse(text='fixture response') {
   return new Response(events.map(event=>`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')+'data: [DONE]\n\n',{headers:{'Content-Type':'text/event-stream'}});
 }
 async function setup(t) {
-  const dir=await mkdtemp(path.join(process.env.BH_AGENT_WORKSPACE || '/Users/leway/.hermes/cache/scratch','octopus-auth-'));
+  const dir=await mkdtemp(path.join(process.env.BH_AGENT_WORKSPACE || tmpdir(),'octopus-auth-'));
   const names=['OCTOPUS_DATA_DIR','OCTOPUS_AGENT_DIR','OCTOPUS_MODEL_CONFIG','OCTOPUS_MODEL_BASE_URL','OPENAI_API_KEY','OCTOPUS_API_KEY','OPENAI_ADMIN_KEY','AZURE_OPENAI_API_KEY','OPENAI_LOG'];
   const old=Object.fromEntries(names.map(name=>[name,process.env[name]]));
   Object.assign(process.env,{OCTOPUS_DATA_DIR:dir,OCTOPUS_AGENT_DIR:path.join(dir,'sessions'),OCTOPUS_MODEL_CONFIG:path.join(dir,'model.json'),OPENAI_API_KEY:ambient,OCTOPUS_API_KEY:ambient,OPENAI_ADMIN_KEY:ambient,AZURE_OPENAI_API_KEY:ambient});

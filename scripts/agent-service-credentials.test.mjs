@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,symlink,rm,chmod} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {createAgentService} from './agent-service.mjs';
 
 const finderPath='/usr/bin:/bin:/usr/sbin:/sbin';
@@ -10,7 +11,7 @@ const credentialRef='fixture/--literal.key';
 const fixtureValue='fixture-only-local-cli-output';
 
 async function fixture(t) {
-  const directory=await mkdtemp(path.join(process.env.BH_AGENT_WORKSPACE || '/Users/leway/.hermes/cache/scratch','octopus-local-cli-fixture-'));
+  const directory=await mkdtemp(path.join(process.env.BH_AGENT_WORKSPACE || tmpdir(),'octopus-local-cli-fixture-'));
   const home=path.join(directory,'home');
   await mkdir(path.join(home,'.local/bin'),{recursive:true});
   await symlink(process.execPath,path.join(home,'.local/bin/octopus-fixture-node'));
